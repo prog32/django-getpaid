@@ -2,12 +2,15 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Type, Union
+from urllib.parse import urljoin
 
 from django.conf import settings
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.exceptions import ImproperlyConfigured
 from django.forms import BaseForm
 from django.http import HttpRequest, HttpResponse
+from django.urls import reverse
+from django.utils.module_loading import import_string
 from django.views import View
 
 from getpaid.types import ChargeResponse, PaymentStatusResponse
@@ -42,6 +45,7 @@ class BaseProcessor(ABC):
         self.config = getattr(settings, "GETPAID_BACKEND_SETTINGS", {}).get(
             self.path, {}
         )
+        self.validate_config(self.config)
         self.optional_config = getattr(settings, "GETPAID", {})
         if self.client_class is not None:
             self.client = self.get_client()
@@ -61,6 +65,25 @@ class BaseProcessor(ABC):
 
     def get_client_params(self) -> dict:
         return {}
+
+    def validate_config(self, config):
+        pass
+        """
+        validate config, raise exception on error e.g.
+        raise ImproperlyConfigured(
+            "Invalid config GETPAID_BACKEND_SETTINGS[{}]".format(self.path)
+        )
+        """
+
+    def get_real_ip(self, request):
+        """
+        You can use solutions like: https://github.com/un33k/django-ipware
+        """
+
+        if getattr(settings, 'GETPAID_GET_CLIENT_IP', None):
+            return import_string(settings.GETPAID_GET_CLIENT_IP)(request)
+
+        raise NotImplementedError()
 
     @classmethod
     def class_id(cls, **kwargs) -> str:
@@ -90,6 +113,40 @@ class BaseProcessor(ABC):
             return cls.sandbox_url
         return cls.production_url
 
+    @classmethod
+    def get_full_url(cls, relative_url, request: HttpRequest) -> str:
+        return urljoin(
+            cls.get_our_baseurl(request),
+            relative_url
+        )
+
+    @classmethod
+    def get_callback_url(cls, payment, request: HttpRequest) -> str:
+        return cls.get_full_url(
+            reverse(
+                "getpaid:callback", kwargs={"pk": str(payment.pk)}
+            ),
+            request=request
+        )
+
+    @classmethod
+    def get_failure_url(cls, payment, request: HttpRequest) -> str:
+        return cls.get_full_url(
+            reverse(
+                "getpaid:payment-failure", kwargs={"pk": str(payment.pk)}
+            ),
+            request=request
+        )
+
+    @classmethod
+    def get_success_url(cls, payment, request: HttpRequest) -> str:
+        return cls.get_full_url(
+            reverse(
+                "getpaid:payment-success", kwargs={"pk": str(self.payment.pk)}
+            ),
+            request=request
+        )
+
     @staticmethod
     def get_our_baseurl(request: HttpRequest = None, **kwargs) -> str:
         """
@@ -97,7 +154,8 @@ class BaseProcessor(ABC):
         Note that this way 'https' is enforced on production environment.
         """
         if request is None:
-            return "http://127.0.0.1/"
+            raise Exception("Request is missing")
+
         scheme = "http" if settings.DEBUG else "https"
         return f"{scheme}://{get_current_site(request).domain}/"
 

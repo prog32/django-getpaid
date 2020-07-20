@@ -4,7 +4,6 @@ from decimal import Decimal
 from importlib import import_module
 from typing import List, Optional, Union
 
-import swapper
 from django import forms
 from django.db import models
 from django.db.transaction import atomic
@@ -14,6 +13,8 @@ from django.shortcuts import resolve_url
 from django.utils.timezone import now
 from django.utils.translation import ugettext_lazy as _
 from django.views import View
+
+import swapper
 from django_fsm import (
     ConcurrentTransitionMixin,
     FSMField,
@@ -24,6 +25,7 @@ from django_fsm import (
 
 from . import FraudStatus as fs
 from . import PaymentStatus as ps
+from .adapter import get_order_adapter
 from .exceptions import ChargeFailure, GetPaidException
 from .processor import BaseProcessor
 from .registry import registry
@@ -237,10 +239,10 @@ class AbstractPayment(ConcurrentTransitionMixin, models.Model):
         returns a list.
         """
         # TODO: type/interface annotation
-        return self.order.get_items()
+        return get_order_adapter(self.order).get_items()
 
     def get_buyer_info(self) -> BuyerInfo:
-        return self.order.get_buyer_info()
+        return get_order_adapter(self.order).get_buyer_info()
 
     def get_form(self, *args, **kwargs) -> BaseForm:
         """
@@ -324,7 +326,12 @@ class AbstractPayment(ConcurrentTransitionMixin, models.Model):
             # we may want to return to Order summary or smth
             kwargs = self.get_return_redirect_kwargs(request, success)
             return resolve_url(url, **kwargs)
-        return resolve_url(self.order.get_return_url(self, success=success))
+
+        return resolve_url(
+            get_order_adapter(
+                self.order
+            ).get_return_url(self, success=success)
+        )
 
     def get_return_redirect_kwargs(self, request, success: bool) -> dict:
         return {"pk": self.id}

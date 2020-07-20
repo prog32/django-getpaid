@@ -10,12 +10,12 @@ import logging
 import os
 from urllib.parse import urljoin
 
-import requests
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import reverse, reverse_lazy
-from django_fsm import can_proceed
 
+import requests
+from django_fsm import can_proceed
 from getpaid.post_forms import PaymentHiddenInputsPostForm
 from getpaid.processor import BaseProcessor
 from getpaid.status import PaymentStatus as ps
@@ -54,32 +54,28 @@ class PaymentProcessor(BaseProcessor):
             return urljoin(base, str(self.api_url))
         return urljoin(base, str(self.standard_url))
 
-    def get_params(self):
+    def get_params(self, request):
         base = self.get_paywall_baseurl()
         params = {
             "ext_id": self.payment.id,
             "value": self.payment.amount_required,
             "currency": self.payment.currency,
             "description": self.payment.description,
-            "success_url": urljoin(
-                base,
-                reverse("getpaid:payment-success", kwargs={"pk": str(self.payment.pk)}),
-            ),
-            "failure_url": urljoin(
-                base,
-                reverse("getpaid:payment-failure", kwargs={"pk": str(self.payment.pk)}),
-            ),
+            "success_url": self.get_success_url(self.payment),
+            "failure_url": self.get_failure_url(self.payment.pk),
         }
         if self.get_confirmation_method() == "PUSH":
-            params["callback"] = urljoin(
-                base, reverse("getpaid:callback", kwargs={"pk": str(self.payment.pk)})
+            params["callback"] = self.get_callback_url(
+                self.payment,
+                request=request
             )
+
         return {k: str(v) for k, v in params.items()}
 
     # Specifics
     def prepare_transaction(self, request, view=None, **kwargs):
         target_url = self.get_paywall_baseurl(request)
-        params = self.get_params()
+        params = self.get_params(request)
         method = self.get_paywall_method()
         if method == "REST":
             response = requests.post(target_url, json=params)

@@ -1,9 +1,11 @@
-import swapper
 from django import forms
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
+import swapper
 from getpaid.validators import run_getpaid_validators
+
+from .adapter import get_order_adapter
 
 Order = swapper.load_model("getpaid", "Order")
 
@@ -20,7 +22,13 @@ class PaymentMethodForm(forms.ModelForm):
 
     class Meta:
         model = swapper.load_model("getpaid", "Payment")
-        fields = ["order", "amount_required", "description", "currency", "backend"]
+        fields = [
+            "order",
+            # "amount_required",
+            # "description",
+            # "currency",
+            "backend"
+        ]
         widgets = {
             "amount_required": forms.HiddenInput,
             "description": forms.HiddenInput,
@@ -32,10 +40,10 @@ class PaymentMethodForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
         order = self.initial.get("order")
-        currency = getattr(order, "currency", None) or self.data.get("currency")
-        if order is not None:
-            self.initial["amount_required"] = order.get_total_amount()
-            self.initial["description"] = order.get_description()
+        order_adapter = get_order_adapter(order)
+
+        currency = order_adapter.get_currency()
+
         backends = registry.get_choices(currency)
         params = dict(
             choices=backends,
@@ -51,11 +59,19 @@ class PaymentMethodForm(forms.ModelForm):
         self.fields["backend"] = forms.ChoiceField(**params)
 
     def clean_order(self):
-        if hasattr(self.cleaned_data["order"], "is_ready_for_payment"):
-            if not self.cleaned_data["order"].is_ready_for_payment():
-                raise forms.ValidationError(_("Order is not ready for payment."))
+        order_adapter = get_order_adapter(self.cleaned_data["order"])
+        if not order_adapter.is_ready_for_payment():
+            raise forms.ValidationError(_("Order cannot be paid"))
+
         return self.cleaned_data["order"]
 
     def clean(self):
-        cleaned_data = super().clean()
-        return run_getpaid_validators(cleaned_data)
+        self.cleaned_data = super().clean()
+
+        order = self.initial.get("order")
+        order_adapter = get_order_adapter(order)
+
+        self.cleaned_data["amount_required"] = order_adapter.get_total_amount()
+        self.cleaned_data["currency"] = 'pln'
+        self.cleaned_data["description"] = order_adapter.get_description()
+        return run_getpaid_validators(self.cleaned_data)
