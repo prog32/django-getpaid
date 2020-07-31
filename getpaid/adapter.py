@@ -15,7 +15,7 @@ class OrderAdapter(object):
 
 def get_order_adapter(order):
     if not getattr(settings, 'GETPAID_ORDER_ADAPTER', None):
-        CustomOrderAdapter = import_string(app_settings.ADAPTER)
+        CustomOrderAdapter = import_string(settings.GETPAID_ORDER_ADAPTER)
         return CustomOrderAdapter(order)
 
     return OrderAdapter(order)
