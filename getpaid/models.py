@@ -316,6 +316,9 @@ class AbstractPayment(ConcurrentTransitionMixin, models.Model):
                 status_report["exception"] = e
         return status_report
 
+    def get_return_url(self):
+        return get_order_adapter(self.order).get_return_url()
+
     def get_return_redirect_url(self, request, success: bool) -> str:
         if success:
             url = self.processor.get_setting("SUCCESS_URL")
@@ -327,11 +330,10 @@ class AbstractPayment(ConcurrentTransitionMixin, models.Model):
             kwargs = self.get_return_redirect_kwargs(request, success)
             return resolve_url(url, **kwargs)
 
-        return resolve_url(
-            get_order_adapter(
-                self.order
-            ).get_return_url(self, success=success)
-        )
+        return get_order_adapter(
+            self.order
+        ).get_return_url(self, success=success)
+
 
     def get_return_redirect_kwargs(self, request, success: bool) -> dict:
         return {"pk": self.id}

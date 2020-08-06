@@ -1,12 +1,16 @@
-import swapper
+import logging
+
 from django import http
 from django.shortcuts import get_object_or_404
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import CreateView, RedirectView
 
+import swapper
+
 from .forms import PaymentMethodForm
 
+logger = logging.getLogger(__name__)
 
 class CreatePaymentView(CreateView):
     model = swapper.load_model("getpaid", "Payment")
@@ -73,6 +77,7 @@ class CallbackDetailView(View):
     def post(self, request, pk, *args, **kwargs):
         Payment = swapper.load_model("getpaid", "Payment")
         payment = get_object_or_404(Payment, pk=pk)
+        logger.info(f"Payment callback received for {pk}: {payment.backend}")
         return payment.handle_paywall_callback(request, *args, **kwargs)
 
 

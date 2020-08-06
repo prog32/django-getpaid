@@ -115,6 +115,8 @@ class BaseProcessor(ABC):
 
     @classmethod
     def get_full_url(cls, relative_url, request: HttpRequest) -> str:
+        """Creates absolute url with domain from request.
+        If you pass absolute url it will be returned unchanged!"""
         return urljoin(
             cls.get_our_baseurl(request),
             relative_url
@@ -156,7 +158,7 @@ class BaseProcessor(ABC):
         if request is None:
             raise Exception("Request is missing")
 
-        scheme = "http" if settings.DEBUG else "https"
+        scheme = "https" if settings.DEBUG else "https"
         return f"{scheme}://{get_current_site(request).domain}/"
 
     def get_template_names(self, view: Optional[View] = None, **kwargs) -> List[str]:
